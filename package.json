@@ -1,0 +1,33 @@
+{
+  "name": "@webcull/cli",
+  "version": "0.1.1",
+  "description": "Official WebCull CLI for secure bookmark access and agent workflows.",
+  "type": "module",
+  "license": "SEE LICENSE IN LICENSE.md",
+  "homepage": "https://webcull.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/webcull/webcull-cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/webcull/webcull-cli/issues"
+  },
+  "bin": {
+    "webcull": "src/cli.js"
+  },
+  "files": [
+    "src/",
+    "README.md",
+    "LICENSE.md",
+    "SECURITY.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "check": "node --check src/cli.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {}
+}
