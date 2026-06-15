@@ -4,6 +4,11 @@
 It is designed for humans, scripts, and coding agents that need conservative
 read and focused write access to a subscribed WebCull account.
 
+## Links
+
+- npm: https://www.npmjs.com/package/@webcull/cli
+- GitHub: https://github.com/webcull/webcull-cli
+
 ## Install
 
 ```bash
