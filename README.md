@@ -26,9 +26,11 @@ webcull login
 Login starts a browser approval flow. The terminal shows a pairing code and the
 browser approval page shows the same code. Compare the codes before approving.
 
-CLI tokens are separate from browser, extension, and app sessions. Tokens are
-stored in OS credential storage when available. The local config file may store
-non-secret metadata only.
+CLI tokens are separate from browser, extension, Raycast, and app sessions. They
+use WebCull's shared API integration auth layer with `client_type = cli`, while
+CLI subscription policy remains CLI-specific. Tokens are stored in OS credential
+storage when available. The local config file may store non-secret metadata
+only.
 
 ## Common Commands
 
