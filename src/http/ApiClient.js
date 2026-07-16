@@ -69,14 +69,9 @@ export class ApiClient {
             return;
           }
           parsed = this.safeResponse(parsed, null);
-          if (parsed && parsed.error === 'throttled') {
-            const retry = parsed.retry_after_seconds ? Number(parsed.retry_after_seconds) : 60;
-            const throttle = parsed.throttle ? ' ' + parsed.throttle : '';
-            reject(new Error('WebCull CLI' + throttle + ' limit reached. Wait at least ' + retry + ' seconds, then retry with a narrower request.'));
-            return;
-          }
-          if (res.statusCode < 200 || res.statusCode >= 300) {
-            reject(new Error(this.safeMessage(parsed.failure || parsed.error || 'WebCull API request failed.')));
+          const responseError = this.responseError(parsed, res.statusCode);
+          if (responseError) {
+            reject(responseError);
             return;
           }
           resolve(parsed);
@@ -92,6 +87,38 @@ export class ApiClient {
     return String(message || '')
       .replace(/Bearer\s+[A-Za-z0-9._~+/-]+/gi, 'Bearer [redacted]')
       .replace(/wco_cli_[A-Za-z0-9_-]+/g, '[redacted-cli-token]');
+  }
+
+  structuredError(response, fallbackMessage) {
+    const safe = this.safeResponse(response, null);
+    const error = new Error(this.safeMessage(safe.failure || safe.error || fallbackMessage));
+    error.cliResponse = safe;
+    return error;
+  }
+
+  responseError(parsed, statusCode) {
+    if (parsed && ['request_busy', 'request_lock_unavailable'].includes(parsed.code)) {
+      return this.structuredError(parsed, 'WebCull CLI request coordination failed.');
+    }
+    if (parsed && (parsed.code === 'throttled' || parsed.error === 'throttled')) {
+      const retry = parsed.retry_after_seconds ? Number(parsed.retry_after_seconds) : 60;
+      const throttle = parsed.throttle ? ' ' + parsed.throttle : '';
+      const failure = 'WebCull CLI' + throttle + ' limit reached. Wait at least ' + retry + ' seconds, then retry with a narrower request.';
+      return this.structuredError({
+        ...parsed,
+        success: 'false',
+        failure,
+        code: 'throttled',
+        retry_after_seconds: retry
+      }, failure);
+    }
+    if (statusCode < 200 || statusCode >= 300) {
+      const failure = this.safeMessage(parsed?.failure || parsed?.error || 'WebCull API request failed.');
+      return parsed && parsed.code
+        ? this.structuredError(parsed, failure)
+        : new Error(failure);
+    }
+    return null;
   }
 
   safeResponse(value, key = null) {

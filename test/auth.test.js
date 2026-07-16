@@ -143,6 +143,35 @@ test('ApiClient redacts CLI tokens from server-provided error messages', () => {
   assert.equal(response.token, validToken());
 });
 
+test('ApiClient preserves structured retry guidance for agent-readable failures', () => {
+  const client = new ApiClient({ apiUrl: 'https://api.webcull.com', tokenStore: {} });
+  const error = client.structuredError({
+    success: 'false',
+    failure: 'Another request is running.',
+    code: 'request_busy',
+    retry_after_ms: 1000
+  }, 'Request failed.');
+  assert.equal(error.message, 'Another request is running.');
+  assert.deepEqual(error.cliResponse, {
+    success: 'false',
+    failure: 'Another request is running.',
+    code: 'request_busy',
+    retry_after_ms: 1000
+  });
+});
+
+test('ApiClient classifies request_busy results without discarding the response code', () => {
+  const client = new ApiClient({ apiUrl: 'https://api.webcull.com', tokenStore: {} });
+  const error = client.responseError({
+    success: 'false',
+    failure: 'Another request is running.',
+    code: 'request_busy',
+    retry_after_ms: 1000
+  }, 200);
+  assert.equal(error.cliResponse.code, 'request_busy');
+  assert.equal(error.cliResponse.retry_after_ms, 1000);
+});
+
 test('CredentialStore uses platform credential providers', async () => {
   const calls = [];
   const runCommand = async (file, args, options = {}) => {

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.2
+
+- Preserve structured retry codes for concurrent-request and throttle failures.
+
 ## 0.1.1
 
 - Update repository metadata for the WebCull organization repo.

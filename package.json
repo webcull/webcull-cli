@@ -1,6 +1,6 @@
 {
   "name": "@webcull/cli",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Official WebCull CLI for secure bookmark access and agent workflows.",
   "type": "module",
   "license": "SEE LICENSE IN LICENSE.md",
