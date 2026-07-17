@@ -8,7 +8,7 @@ export class ApiClient {
     this.tokenStore = tokenStore;
   }
 
-  async post(path, data = {}, { auth = false } = {}) {
+  async post(path, data = {}, { auth = false, authToken = null } = {}) {
     const url = new URL(path, this.apiUrl);
     const body = new URLSearchParams();
     for (const [key, value] of Object.entries(data)) {
@@ -21,8 +21,8 @@ export class ApiClient {
       'Accept-Encoding': 'gzip, deflate',
       'User-Agent': 'webcull-cli/0.1.0'
     };
-    if (auth) {
-      const token = await this.tokenStore.requireToken();
+    if (auth || authToken) {
+      const token = authToken || await this.tokenStore.requireToken();
       headers.Authorization = 'Bearer ' + token;
     }
     return await this.request(url, {

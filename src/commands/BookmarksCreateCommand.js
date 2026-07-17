@@ -1,5 +1,6 @@
 import { JsonOutput } from '../output/JsonOutput.js';
 import { WriteCommandValidation } from './WriteCommandValidation.js';
+import { resolveCreateProxyFields } from './BookmarkProxyOptions.js';
 
 export class BookmarksCreateCommand {
   constructor(apiClient, e2eeSession) {
@@ -16,12 +17,24 @@ export class BookmarksCreateCommand {
       'parentPath',
       'type',
       'dryRun',
+      'proxy',
+      'proxyFields',
+      'proxyExclude',
       'format'
     ]);
   }
 
   async run(parsed) {
     this.validation.validateCommon(parsed);
+    if (parsed.options.proxy !== undefined && parsed.options.proxy !== true) {
+      throw new Error('--proxy does not accept a value.');
+    }
+    const proxyRequested = parsed.options.proxy === true
+      || parsed.options.proxyFields !== undefined
+      || parsed.options.proxyExclude !== undefined;
+    const proxyFields = proxyRequested
+      ? resolveCreateProxyFields(parsed.options.proxyFields, parsed.options.proxyExclude)
+      : [];
     const type = parsed.options.type || (parsed.options.url ? 'bookmark' : '');
     if (!['bookmark', 'folder'].includes(type)) {
       throw new Error('Create requires --url or --type folder.');
@@ -34,6 +47,13 @@ export class BookmarksCreateCommand {
     }
     if (type === 'folder' && !String(parsed.options.title || '').trim()) {
       throw new Error('Folder create requires --title.');
+    }
+    if (proxyRequested && type !== 'bookmark') {
+      throw new Error('--proxy is available only for bookmark creation.');
+    }
+    const e2eeEnabled = await this.e2eeSession.enabled();
+    if (proxyRequested && e2eeEnabled) {
+      throw new Error('Proxy refresh is unavailable for E2EE accounts.');
     }
     const tags = this.validation.normalizeTags(parsed.options.tags);
     const values = {
@@ -51,7 +71,7 @@ export class BookmarksCreateCommand {
     if (parsed.options.url !== undefined) {
       patch.url = String(parsed.options.url).trim();
     }
-    if (type === 'bookmark' && patch.title === undefined && await this.e2eeSession.enabled()) {
+    if (type === 'bookmark' && patch.title === undefined && e2eeEnabled) {
       patch.title = patch.url;
     }
     if (parsed.options.notes !== undefined) {
@@ -71,6 +91,17 @@ export class BookmarksCreateCommand {
       dry_run: parsed.options.dryRun ? '1' : '0'
     };
     const response = await this.apiClient.post('/cli/bookmarks-create', payload, { auth: true });
-    this.output.print(response, parsed.options);
+    if (!proxyRequested || parsed.options.dryRun || response.success !== 'true' || !response.id) {
+      this.output.print(response, parsed.options);
+      return;
+    }
+    const proxyResponse = await this.apiClient.post('/cli/bookmarks-proxy', {
+      id: response.id,
+      fields: proxyFields.join(',')
+    }, { auth: true });
+    this.output.print({
+      ...response,
+      proxy: proxyResponse
+    }, parsed.options);
   }
 }

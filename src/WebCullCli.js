@@ -2,6 +2,8 @@ import { CommandParser } from './query/CommandParser.js';
 import { ApiClient } from './http/ApiClient.js';
 import { TokenStore } from './auth/TokenStore.js';
 import { LoginCommand } from './commands/LoginCommand.js';
+import { LogoutCommand } from './commands/LogoutCommand.js';
+import { AccountsCommand } from './commands/AccountsCommand.js';
 import { WhoamiCommand } from './commands/WhoamiCommand.js';
 import { LimitsCommand } from './commands/LimitsCommand.js';
 import { BookmarksCountCommand } from './commands/BookmarksCountCommand.js';
@@ -10,6 +12,7 @@ import { BookmarksSearchCommand } from './commands/BookmarksSearchCommand.js';
 import { BookmarksGetCommand } from './commands/BookmarksGetCommand.js';
 import { BookmarksCreateCommand } from './commands/BookmarksCreateCommand.js';
 import { BookmarksUpdateCommand } from './commands/BookmarksUpdateCommand.js';
+import { BookmarksProxyCommand } from './commands/BookmarksProxyCommand.js';
 import { GraphAroundCommand } from './commands/GraphAroundCommand.js';
 import { GraphBacklinksCommand } from './commands/GraphBacklinksCommand.js';
 import { GraphPathCommand } from './commands/GraphPathCommand.js';
@@ -31,7 +34,9 @@ export class WebCullCli {
     this.e2eeSession = new E2eeSession(this.apiClient);
     this.commands = new Map();
     this.register(new LoginCommand(this.apiClient, this.tokenStore));
-    this.register(new WhoamiCommand(this.apiClient));
+    this.register(new LogoutCommand(this.apiClient, this.tokenStore));
+    this.register(new AccountsCommand(this.tokenStore));
+    this.register(new WhoamiCommand(this.apiClient, this.tokenStore));
     this.register(new LimitsCommand(this.apiClient));
     this.register(new BookmarksCountCommand(this.apiClient));
     this.register(new BookmarksTreeCommand(this.apiClient));
@@ -39,6 +44,7 @@ export class WebCullCli {
     this.register(new BookmarksGetCommand(this.apiClient, this.e2eeSession));
     this.register(new BookmarksCreateCommand(this.apiClient, this.e2eeSession));
     this.register(new BookmarksUpdateCommand(this.apiClient, this.e2eeSession));
+    this.register(new BookmarksProxyCommand(this.apiClient, this.e2eeSession));
     this.register(new GraphAroundCommand(this.apiClient));
     this.register(new GraphBacklinksCommand(this.apiClient));
     this.register(new GraphPathCommand(this.apiClient));
@@ -59,6 +65,9 @@ export class WebCullCli {
   async run(argv) {
     this.rejectForbiddenE2eeInputs(argv);
     const parsed = this.parser.parse(argv);
+    if (parsed.options.account !== undefined) {
+      this.tokenStore.useAccount(parsed.options.account);
+    }
     if (parsed.options.help || parsed.command === 'help' || !parsed.command) {
       this.printHelp();
       return;
@@ -98,6 +107,8 @@ export class WebCullCli {
       '',
       'Commands:',
       '  login                     Authorize the CLI in a browser',
+      '  logout                    Revoke and remove the CLI authorization',
+      '  accounts                  List logged-in accounts',
       '  whoami                    Show the authorized account',
       '  limits                    Show current CLI usage limits',
       '  bookmarks count           Count children under a path',
@@ -106,6 +117,7 @@ export class WebCullCli {
       '  bookmarks get             Fetch bookmarks by id',
       '  bookmarks create          Create one bookmark or folder',
       '  bookmarks update <id>     Update one bookmark or folder',
+      '  bookmarks proxy <id>      Refresh bookmark metadata through the proxy',
       '  graph around              Show relationships around a stack item',
       '  graph backlinks           Show items that point at a stack item',
       '  graph path                Show a bounded path between stack items',
@@ -120,7 +132,9 @@ export class WebCullCli {
       '  --page <n>                Page number, starts at 1',
       '  --max-chars <n>           Maximum response characters',
       '  --fields <list>           Comma separated output fields',
-      '  --format json|jsonl       Output format'
+      '  --format json|jsonl       Output format',
+      '  --account <hash|id>       Use a logged-in account',
+      '  --local-only              Logout option: remove only local authorization'
     ].join('\n'));
   }
 }

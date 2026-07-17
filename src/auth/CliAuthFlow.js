@@ -63,7 +63,22 @@ export class CliAuthFlow {
     while (Date.now() < deadline) {
       const response = await this.apiClient.post('/cli/auth-redeem', { request, verifier, name });
       if (response.success === 'true') {
-        await this.tokenStore.saveToken(response);
+        try {
+          await this.tokenStore.saveToken(response);
+        } catch (error) {
+          if (error.code !== 'account_already_logged_in') {
+            throw error;
+          }
+          try {
+            const revoked = await this.apiClient.post('/cli/auth-logout', {}, { authToken: response.token });
+            if (revoked.success !== 'true') {
+              throw new Error(revoked.failure || 'Duplicate authorization revocation failed.');
+            }
+          } catch (revokeError) {
+            throw new Error('That WebCull account is already logged in, and the duplicate authorization could not be revoked automatically. The existing local authorization was preserved, but the new server token may remain valid until it expires.');
+          }
+          throw error;
+        }
         console.log('WebCull CLI login complete.');
         return;
       }
