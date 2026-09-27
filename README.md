@@ -23,10 +23,9 @@ The package requires Node.js 18 or newer.
 webcull login
 ```
 
-Login starts a browser approval flow. The terminal shows a pairing code and the
-browser approval page shows the same code. Compare the codes before approving.
-Logging in again adds another account instead of replacing the accounts that
-are already authorized.
+Login starts a browser approval flow. Approve only requests you initiated from
+`webcull login`. Logging in again adds another account instead of replacing
+the accounts that are already authorized.
 
 List locally authorized accounts without exposing their tokens:
 
@@ -66,7 +65,7 @@ webcull logout --local-only
 ```
 
 Local-only logout clearly warns that the selected server token may remain
-valid. The `webcull auth logout` alias has the same behavior.
+valid.
 
 CLI tokens are separate from browser, extension, Raycast, and app sessions. They
 use WebCull's shared API integration auth layer with `client_type = cli`, while
@@ -84,6 +83,7 @@ webcull bookmarks count
 webcull bookmarks tree --depth 2 --limit 50
 webcull bookmarks search "design systems" --limit 20
 webcull bookmarks get 123 --fields id,title,value,tags
+webcull bookmarks proxy 123 --fields title,icon,description
 webcull reminders list --limit 20
 webcull graph around --stack-id 123
 webcull graph schema
@@ -92,14 +92,51 @@ webcull graph schema
 Run commands with `--format json` when the output is being consumed by a script
 or agent.
 
+`webcull bookmarks proxy <id>` refreshes selected title, icon, and description
+metadata for a bookmark in a non-E2EE account. Bookmark creation can request the
+same follow-up with `--proxy`, `--proxy-fields`, and `--proxy-exclude`.
+
+Retryable failures preserve structured `request_busy`,
+`request_lock_unavailable`, or `throttled` codes and their retry timing. Respect
+that timing and narrow the next request after throttling.
+
 ## E2EE Safety
 
 The CLI performs end-to-end encryption work locally. It must never send an E2EE
 passphrase, passphrase hash, derived key, or decrypted check value to WebCull.
 
-The CLI rejects passphrase-style command line flags and environment variables.
-When encrypted fields are needed, it prompts interactively with hidden terminal
-input.
+Keep your E2EE passphrase in your own keystore. When encrypted fields are
+needed, pipe one passphrase directly from that keystore and add
+`--e2ee-passphrase-stdin`. This mode requires an explicit
+`--account <hash|id>` so agent commands cannot unlock the wrong account. The CLI
+rejects passphrases in command arguments, environment variables, and config.
+
+macOS Keychain:
+
+```bash
+security find-generic-password -a "$USER" -s webcull-e2ee -w |
+  webcull bookmarks get --account <account-hash> --ids 2302 --fields id,title,notes --e2ee-passphrase-stdin
+```
+
+Windows PowerShell with Microsoft.PowerShell.SecretManagement:
+
+```powershell
+Get-Secret -Name webcull-e2ee -AsPlainText |
+  webcull bookmarks get --account <account-hash> --ids 2302 --fields id,title,notes --e2ee-passphrase-stdin
+```
+
+Linux Secret Service:
+
+```bash
+secret-tool lookup service webcull-e2ee account "$USER" |
+  webcull bookmarks get --account <account-hash> --ids 2302 --fields id,title,notes --e2ee-passphrase-stdin
+```
+
+The credential names above are examples. You choose and configure the keystore
+entry. The keystore process writes the passphrase directly to the CLI pipe, so
+the secret does not appear in the agent request, process arguments, environment,
+WebCull config, or command output. The CLI derives the key locally for that
+process and does not remember the passphrase or derived key.
 
 ## WebCull Account Access
 

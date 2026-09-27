@@ -12,6 +12,7 @@ import { LoginCommand } from '../src/commands/LoginCommand.js';
 import { AccountsCommand } from '../src/commands/AccountsCommand.js';
 import { AccountPicker } from '../src/auth/AccountPicker.js';
 import { CliAuthFlow } from '../src/auth/CliAuthFlow.js';
+import { WebCullCli } from '../src/WebCullCli.js';
 
 class MemoryCredentialStore {
   constructor() {
@@ -207,7 +208,17 @@ test('LogoutCommand revokes the current server token before purging local author
     ['purge']
   ]);
   assert.deepEqual(messages, ['WebCull CLI logout complete. Server authorization revoked and local credentials removed.']);
-  assert.deepEqual(command.aliases, ['auth logout']);
+});
+
+test('WebCullCli exposes one command name for each account action', () => {
+  const cli = new WebCullCli();
+  assert.equal(cli.commands.has('login'), true);
+  assert.equal(cli.commands.has('accounts'), true);
+  assert.equal(cli.commands.has('logout'), true);
+  assert.equal(cli.commands.has('auth login'), false);
+  assert.equal(cli.commands.has('auth accounts'), false);
+  assert.equal(cli.commands.has('auth list'), false);
+  assert.equal(cli.commands.has('auth logout'), false);
 });
 
 test('LogoutCommand preserves local authorization when server revocation fails', async () => {

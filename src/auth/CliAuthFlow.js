@@ -18,11 +18,9 @@ export class CliAuthFlow {
     if (start.success !== 'true') {
       throw new Error(start.failure || start.error || 'Could not start CLI login.');
     }
-    const code = this.pairingCode(request);
     const approvalUrl = this.appUrl + '/accounts#cli-auth/' + encodeURIComponent(request);
-    console.log('Your pairing code is: ' + code);
-    console.log('Only approve if the browser shows this exact code.');
     console.log('Approve in your browser: ' + approvalUrl);
+    console.log('Only approve this request if you started WebCull CLI login just now.');
     if (options.browser !== 'false') {
       await this.openBrowser(approvalUrl);
     }
@@ -38,10 +36,6 @@ export class CliAuthFlow {
 
   hashBase64Url(value) {
     return crypto.createHash('sha256').update(value).digest('base64url');
-  }
-
-  pairingCode(request) {
-    return request.slice(0, 4).toUpperCase() + '-' + request.slice(-4).toUpperCase();
   }
 
   async waitForEnter() {

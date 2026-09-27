@@ -3,7 +3,6 @@ import { AccountPicker } from '../auth/AccountPicker.js';
 export class LogoutCommand {
   constructor(apiClient, tokenStore, logger = console, accountPicker = null) {
     this.name = 'logout';
-    this.aliases = ['auth logout'];
     this.apiClient = apiClient;
     this.tokenStore = tokenStore;
     this.logger = logger;

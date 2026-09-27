@@ -21,7 +21,7 @@ export class CommandParser {
       }
     }
     const command = args[0] || '';
-    const twoWordNamespaces = new Set(['auth', 'bookmarks', 'graph', 'reminders']);
+    const twoWordNamespaces = new Set(['bookmarks', 'graph', 'reminders']);
     const commandPath = twoWordNamespaces.has(command) && args[1] ? command + ' ' + args[1] : command;
     const positionals = commandPath.includes(' ') ? args.slice(2) : args.slice(1);
     return { command, commandPath, positionals, options, optionCounts };

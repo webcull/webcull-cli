@@ -3,7 +3,6 @@ import { JsonOutput } from '../output/JsonOutput.js';
 export class AccountsCommand {
   constructor(tokenStore) {
     this.name = 'accounts';
-    this.aliases = ['auth accounts', 'auth list'];
     this.tokenStore = tokenStore;
     this.output = new JsonOutput();
   }

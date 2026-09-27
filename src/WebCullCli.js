@@ -57,14 +57,12 @@ export class WebCullCli {
 
   register(command) {
     this.commands.set(command.name, command);
-    for (const alias of command.aliases || []) {
-      this.commands.set(alias, command);
-    }
   }
 
   async run(argv) {
     this.rejectForbiddenE2eeInputs(argv);
     const parsed = this.parser.parse(argv);
+    this.configureE2eePassphraseInput(parsed);
     if (parsed.options.account !== undefined) {
       this.tokenStore.useAccount(parsed.options.account);
     }
@@ -79,6 +77,20 @@ export class WebCullCli {
     await command.run(parsed);
   }
 
+  configureE2eePassphraseInput(parsed) {
+    const value = parsed.options.e2eePassphraseStdin;
+    if (value === undefined) {
+      return;
+    }
+    if (value !== true || parsed.optionCounts.e2eePassphraseStdin !== 1) {
+      throw new Error('--e2ee-passphrase-stdin is a flag and must not contain a passphrase value.');
+    }
+    if (parsed.options.account === undefined) {
+      throw new Error('--e2ee-passphrase-stdin requires --account <hash|id>.');
+    }
+    this.e2eeSession.setPassphraseStdin(true);
+  }
+
   rejectForbiddenE2eeInputs(argv) {
     const forbiddenOptions = new Set([
       '--e2ee-password',
@@ -91,7 +103,7 @@ export class WebCullCli {
     for (const arg of argv) {
       const key = String(arg).split('=')[0];
       if (forbiddenOptions.has(key)) {
-        throw new Error('E2EE passphrases are accepted only through hidden interactive terminal input.');
+        throw new Error('E2EE passphrases are accepted only through --e2ee-passphrase-stdin from a user-managed keystore.');
       }
     }
     for (const key of Object.keys(process.env)) {
@@ -134,6 +146,7 @@ export class WebCullCli {
       '  --fields <list>           Comma separated output fields',
       '  --format json|jsonl       Output format',
       '  --account <hash|id>       Use a logged-in account',
+      '  --e2ee-passphrase-stdin   Read one passphrase from piped stdin',
       '  --local-only              Logout option: remove only local authorization'
     ].join('\n'));
   }

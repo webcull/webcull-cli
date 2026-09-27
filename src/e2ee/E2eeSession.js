@@ -1,15 +1,20 @@
 import { E2eeCrypto } from './E2eeCrypto.js';
-import { HiddenPrompt } from './HiddenPrompt.js';
+import { PipedPassphraseInput } from './PipedPassphraseInput.js';
 
 const EDITABLE_ENCRYPTED_FIELDS = ['title', 'url', 'notes', 'tags', 'note'];
 
 export class E2eeSession {
-  constructor(apiClient, prompt = new HiddenPrompt(), crypto = new E2eeCrypto()) {
+  constructor(apiClient, passphraseInput = new PipedPassphraseInput(), crypto = new E2eeCrypto()) {
     this.apiClient = apiClient;
-    this.prompt = prompt;
+    this.passphraseInput = passphraseInput;
     this.crypto = crypto;
     this.metadata = null;
     this.currentKey = null;
+    this.passphraseStdin = false;
+  }
+
+  setPassphraseStdin(enabled) {
+    this.passphraseStdin = enabled === true;
   }
 
   async loadMetadata() {
@@ -60,7 +65,7 @@ export class E2eeSession {
     if (this.currentKey) {
       return this.currentKey;
     }
-    let passphrase = await this.prompt.ask('E2EE passphrase: ');
+    let passphrase = await this.passphraseInput.read({ enabled: this.passphraseStdin });
     try {
       this.currentKey = await this.crypto.validatePassphrase(passphrase, metadata);
       return this.currentKey;
@@ -83,7 +88,7 @@ export class E2eeSession {
     if (this.currentKey) {
       return this.currentKey;
     }
-    let passphrase = await this.prompt.ask('E2EE passphrase: ');
+    let passphrase = await this.passphraseInput.read({ enabled: this.passphraseStdin });
     try {
       this.currentKey = await this.crypto.validatePassphrase(passphrase, metadata);
       return this.currentKey;
