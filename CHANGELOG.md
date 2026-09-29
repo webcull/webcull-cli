@@ -9,8 +9,7 @@
   structured `account_selection_required` output for non-interactive callers.
 - Add `webcull logout` to revoke the current server token before removing local
   CLI authorization.
-- Use one command name for each account action: `webcull login`,
-  `webcull accounts`, and `webcull logout`.
+- Account actions: `webcull login`, `webcull accounts`, and `webcull logout`.
 - Add explicit `webcull logout --local-only` recovery behavior for offline
   local credential removal.
 - Add `webcull bookmarks proxy <id>` and optional bookmark-create proxy refresh
