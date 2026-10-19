@@ -5,7 +5,8 @@ import path from 'node:path';
 import { CredentialStore } from './CredentialStore.js';
 
 export class TokenStore {
-  constructor(configPath = process.env.WEBCULL_CONFIG, credentialStore = null) {
+  constructor(configPath = process.env.WEBCULL_CONFIG, credentialStore = null, { client = 'cli' } = {}) {
+    this.client = client;
     this.configPath = configPath || path.join(os.homedir(), '.config', 'webcull', 'config.json');
     this.tokenPrefix = 'wco_cli_';
     this.injectedCredentialStore = typeof credentialStore === 'function' ? null : credentialStore;
@@ -358,7 +359,7 @@ export class TokenStore {
     if (this.injectedCredentialStore) {
       return this.injectedCredentialStore;
     }
-    return new CredentialStore({ account: credentialAccount });
+    return new CredentialStore({ service: 'webcull-' + this.client, account: credentialAccount });
   }
 
   credentialAccount(userHash = null) {
@@ -489,6 +490,9 @@ export class TokenStore {
       throw new Error('WebCull CLI config must be a JSON object.');
     }
     this.rejectSecretConfigKeys(config);
+    if (this.client === 'mcp' && config.token !== undefined) {
+      throw new Error('MCP credentials must be stored in the OS keystore, never in configuration.');
+    }
     if (config.token !== undefined && !this.isCliToken(config.token)) {
       throw new Error('WebCull CLI config contains an invalid token. Run webcull login again.');
     }

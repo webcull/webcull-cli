@@ -1,9 +1,9 @@
 import { CliAuthFlow } from '../auth/CliAuthFlow.js';
 
 export class LoginCommand {
-  constructor(apiClient, tokenStore) {
+  constructor(apiClient, tokenStore, flow = null) {
     this.name = 'login';
-    this.flow = new CliAuthFlow(apiClient, tokenStore);
+    this.flow = flow || new CliAuthFlow(apiClient, tokenStore);
   }
 
   async run(parsed) {

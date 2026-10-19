@@ -11,6 +11,19 @@ export class CliAuthFlow {
   }
 
   async run(options) {
+    const { request, verifier, approvalUrl } = await this.begin();
+    console.log('Approve in your browser: ' + approvalUrl);
+    console.log('Only approve this request if you started WebCull ' + (this.apiClient.client || 'cli').toUpperCase() + ' login just now.');
+    if (options.browser !== 'false') {
+      await this.openBrowser(approvalUrl);
+    }
+    if (options.wait !== 'false') {
+      await this.waitForEnter();
+    }
+    await this.poll(request, verifier, options.name || 'WebCull ' + (this.apiClient.client || 'cli').toUpperCase());
+  }
+
+  async begin() {
     const request = this.randomBase64Url(32);
     const verifier = this.randomBase64Url(48);
     const challenge = this.hashBase64Url(verifier);
@@ -18,16 +31,8 @@ export class CliAuthFlow {
     if (start.success !== 'true') {
       throw new Error(start.failure || start.error || 'Could not start CLI login.');
     }
-    const approvalUrl = this.appUrl + '/accounts#cli-auth/' + encodeURIComponent(request);
-    console.log('Approve in your browser: ' + approvalUrl);
-    console.log('Only approve this request if you started WebCull CLI login just now.');
-    if (options.browser !== 'false') {
-      await this.openBrowser(approvalUrl);
-    }
-    if (options.wait !== 'false') {
-      await this.waitForEnter();
-    }
-    await this.poll(request, verifier, options.name || 'WebCull CLI');
+    const approvalUrl = this.appUrl + '/accounts#' + (this.apiClient.client || 'cli') + '-auth/' + encodeURIComponent(request);
+    return { request, verifier, approvalUrl };
   }
 
   randomBase64Url(bytes) {
@@ -52,28 +57,36 @@ export class CliAuthFlow {
     child.unref();
   }
 
+  async complete(request, verifier, name) {
+    const response = await this.apiClient.post('/cli/auth-redeem', { request, verifier, name });
+    if (response.success === 'true') await this.saveAuthorization(response);
+    return response;
+  }
+
+  async saveAuthorization(response) {
+    try {
+      await this.tokenStore.saveToken(response);
+    } catch (error) {
+      // An unusable local authorization must not leave a new server token behind.
+      try {
+        const revoked = await this.apiClient.post('/cli/auth-logout', {}, { authToken: response.token });
+        if (revoked.success !== 'true') throw new Error('Authorization revocation failed.');
+      } catch (revokeError) {
+        throw new Error(error.code === 'account_already_logged_in'
+          ? 'That WebCull account is already logged in, and the duplicate authorization could not be revoked automatically. The existing local authorization was preserved, but the new server token may remain valid until it expires.'
+          : 'Local credential storage failed and the new server authorization could not be revoked. The token may remain valid until it expires.');
+      }
+      throw error;
+    }
+  }
+
   async poll(request, verifier, name) {
     const deadline = Date.now() + 300000;
     while (Date.now() < deadline) {
       const response = await this.apiClient.post('/cli/auth-redeem', { request, verifier, name });
       if (response.success === 'true') {
-        try {
-          await this.tokenStore.saveToken(response);
-        } catch (error) {
-          if (error.code !== 'account_already_logged_in') {
-            throw error;
-          }
-          try {
-            const revoked = await this.apiClient.post('/cli/auth-logout', {}, { authToken: response.token });
-            if (revoked.success !== 'true') {
-              throw new Error(revoked.failure || 'Duplicate authorization revocation failed.');
-            }
-          } catch (revokeError) {
-            throw new Error('That WebCull account is already logged in, and the duplicate authorization could not be revoked automatically. The existing local authorization was preserved, but the new server token may remain valid until it expires.');
-          }
-          throw error;
-        }
-        console.log('WebCull CLI login complete.');
+        await this.saveAuthorization(response);
+        console.log('WebCull ' + (this.apiClient.client || 'cli').toUpperCase() + ' login complete.');
         return;
       }
       if (response.pending !== 'true') {

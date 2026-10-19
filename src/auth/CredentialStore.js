@@ -1,8 +1,9 @@
 import { spawn } from 'node:child_process';
 
 export class CredentialStore {
-  constructor({ service = 'webcull-cli', account = 'default', platform = process.platform, runCommand = null } = {}) {
+  constructor({ service = 'webcull-cli', account = 'default', platform = process.platform, runCommand = null, signal } = {}) {
     this.service = service;
+    this.signal = signal;
     this.account = account;
     this.platform = platform;
     this.runCommand = runCommand || this.realRunCommand;
@@ -36,7 +37,8 @@ export class CredentialStore {
     throw new Error('OS credential storage is not available on this platform.');
   }
 
-  async read() {
+  async read({ preserveWhitespace = false } = {}) {
+    const decode = value => preserveWhitespace ? String(value || '').replace(/\r?\n$/, '') : String(value || '').trim();
     if (this.platform === 'darwin') {
       try {
         const result = await this.runMac('find-generic-password', [
@@ -46,7 +48,7 @@ export class CredentialStore {
           this.service,
           '-w'
         ]);
-        return String(result.stdout || '').trim() || null;
+        return decode(result.stdout) || null;
       } catch (error) {
         if (this.isNotFound(error)) {
           return null;
@@ -56,12 +58,12 @@ export class CredentialStore {
     }
     if (this.platform === 'win32') {
       const result = await this.runWindows(this.windowsReadScript());
-      return String(result.stdout || '').trim() || null;
+      return decode(result.stdout) || null;
     }
     if (this.platform === 'linux') {
       try {
         const result = await this.runSecretTool(['lookup', 'service', this.service, 'account', this.account]);
-        return String(result.stdout || '').trim() || null;
+        return decode(result.stdout) || null;
       } catch (error) {
         if (this.isNotFound(error)) {
           return null;
@@ -133,6 +135,8 @@ export class CredentialStore {
     return new Promise((resolve, reject) => {
       const child = spawn(file, args, {
         stdio: ['pipe', 'pipe', 'pipe'],
+        signal: this.signal,
+        timeout: 30000,
         env: {
           ...process.env,
           ...(options.env || {})
@@ -140,6 +144,8 @@ export class CredentialStore {
       });
       let stdout = '';
       let stderr = '';
+      child.stdout.setEncoding('utf8');
+      child.stderr.setEncoding('utf8');
       child.stdout.on('data', chunk => {
         stdout += chunk.toString('utf8');
       });
@@ -160,6 +166,7 @@ export class CredentialStore {
           reject(error);
         }
       });
+      child.stdin.on('error', reject);
       if (options.input) {
         child.stdin.end(options.input);
       } else {
@@ -170,7 +177,7 @@ export class CredentialStore {
 
   isNotFound(error) {
     const stderr = String(error.stderr || '');
-    return error.code === 1 ||
+    return (this.platform === 'darwin' && error.code === 44) ||
       stderr.includes('could not be found') ||
       stderr.includes('not found') ||
       stderr.includes('Element not found');
@@ -179,6 +186,7 @@ export class CredentialStore {
   windowsBaseScript() {
     return `
 $ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
 $source = @"
 using System;
 using System.Runtime.InteropServices;

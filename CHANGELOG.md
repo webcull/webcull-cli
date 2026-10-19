@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Add local MCP tools for all CLI operations, independent authorization and
+  keystore-only E2EE access, with setup guidance for desktop AI applications.
+- Fix write commands rejecting the global account and encryption input flags.
+
 ## 0.1.2
 
 - Add multiple simultaneous account authorizations with separate OS credential

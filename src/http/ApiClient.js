@@ -3,13 +3,16 @@ import https from 'node:https';
 import zlib from 'node:zlib';
 
 export class ApiClient {
-  constructor({ apiUrl, tokenStore }) {
+  constructor({ apiUrl, tokenStore, client = 'cli', signal }) {
     this.apiUrl = apiUrl.replace(/\/+$/, '');
     this.tokenStore = tokenStore;
+    this.client = client;
+    this.signal = signal;
   }
 
   async post(path, data = {}, { auth = false, authToken = null } = {}) {
-    const url = new URL(path, this.apiUrl);
+    this.signal?.throwIfAborted();
+    const url = new URL(path.replace(/^\/cli\//, '/' + this.client + '/'), this.apiUrl);
     const body = new URLSearchParams();
     for (const [key, value] of Object.entries(data)) {
       if (value !== undefined && value !== null) {
@@ -19,7 +22,7 @@ export class ApiClient {
     const headers = {
       'Content-Type': 'application/x-www-form-urlencoded',
       'Accept-Encoding': 'gzip, deflate',
-      'User-Agent': 'webcull-cli/0.1.0'
+      'User-Agent': 'webcull-' + this.client
     };
     if (auth || authToken) {
       const token = authToken || await this.tokenStore.requireToken();
@@ -37,13 +40,21 @@ export class ApiClient {
     return new Promise((resolve, reject) => {
       const req = transport.request(url, {
         method: options.method,
+        signal: this.signal,
         headers: {
           ...options.headers,
           'Content-Length': Buffer.byteLength(options.body)
         }
       }, res => {
         const chunks = [];
+        let bytes = 0;
+        res.on('error', reject);
         res.on('data', chunk => {
+          bytes += chunk.length;
+          if (bytes > 8 * 1024 * 1024) {
+            res.destroy(new Error('WebCull API response is too large.'));
+            return;
+          }
           chunks.push(chunk);
         });
         res.on('end', () => {
@@ -51,9 +62,9 @@ export class ApiClient {
           const encoding = String(res.headers['content-encoding'] || '').toLowerCase();
           try {
             if (encoding.includes('gzip')) {
-              buffer = zlib.gunzipSync(buffer);
+              buffer = zlib.gunzipSync(buffer, { maxOutputLength: 8 * 1024 * 1024 });
             } else if (encoding.includes('deflate')) {
-              buffer = zlib.inflateSync(buffer);
+              buffer = zlib.inflateSync(buffer, { maxOutputLength: 8 * 1024 * 1024 });
             }
           } catch (error) {
             reject(new Error('Could not decode WebCull API response.'));
@@ -78,6 +89,7 @@ export class ApiClient {
         });
       });
       req.on('error', reject);
+      req.setTimeout(30000, () => req.destroy(new Error('WebCull API request timed out. A submitted write may have completed; check before retrying.')));
       req.write(options.body);
       req.end();
     });

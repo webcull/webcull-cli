@@ -24,17 +24,18 @@ import { RemindersCancelCommand } from './commands/RemindersCancelCommand.js';
 import { E2eeSession } from './e2ee/E2eeSession.js';
 
 export class WebCullCli {
-  constructor() {
+  constructor({ tokenStore, apiClient, e2eeSession, output, logger = console, loginFlow, accountPicker } = {}) {
     this.parser = new CommandParser();
-    this.tokenStore = new TokenStore();
-    this.apiClient = new ApiClient({
+    this.tokenStore = tokenStore || new TokenStore();
+    this.output = output;
+    this.apiClient = apiClient || new ApiClient({
       apiUrl: process.env.WEBCULL_API_URL || 'https://api.webcull.com',
       tokenStore: this.tokenStore
     });
-    this.e2eeSession = new E2eeSession(this.apiClient);
+    this.e2eeSession = e2eeSession || new E2eeSession(this.apiClient);
     this.commands = new Map();
-    this.register(new LoginCommand(this.apiClient, this.tokenStore));
-    this.register(new LogoutCommand(this.apiClient, this.tokenStore));
+    this.register(new LoginCommand(this.apiClient, this.tokenStore, loginFlow));
+    this.register(new LogoutCommand(this.apiClient, this.tokenStore, logger, accountPicker));
     this.register(new AccountsCommand(this.tokenStore));
     this.register(new WhoamiCommand(this.apiClient, this.tokenStore));
     this.register(new LimitsCommand(this.apiClient));
@@ -56,12 +57,17 @@ export class WebCullCli {
   }
 
   register(command) {
+    if (this.output && command.output) command.output = this.output;
     this.commands.set(command.name, command);
   }
 
   async run(argv) {
     this.rejectForbiddenE2eeInputs(argv);
     const parsed = this.parser.parse(argv);
+    return await this.execute(parsed);
+  }
+
+  async execute(parsed) {
     this.configureE2eePassphraseInput(parsed);
     if (parsed.options.account !== undefined) {
       this.tokenStore.useAccount(parsed.options.account);
@@ -74,7 +80,10 @@ export class WebCullCli {
     if (!command) {
       throw new Error('Unknown command: ' + parsed.commandPath);
     }
-    await command.run(parsed);
+    const options = { ...parsed.options };
+    delete options.account;
+    delete options.e2eePassphraseStdin;
+    await command.run({ ...parsed, options });
   }
 
   configureE2eePassphraseInput(parsed) {
@@ -118,6 +127,7 @@ export class WebCullCli {
       'Usage: webcull <command> [options]',
       '',
       'Commands:',
+      '  mcp                       Start the local MCP server (mcp help for setup)',
       '  login                     Authorize the CLI in a browser',
       '  logout                    Revoke and remove the CLI authorization',
       '  accounts                  List logged-in accounts',

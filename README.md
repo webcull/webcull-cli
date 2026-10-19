@@ -4,6 +4,10 @@
 It is designed for humans, scripts, and coding agents that need conservative
 read and focused write access to a subscribed WebCull account.
 
+The package also provides a local MCP server for compatible AI applications.
+See [Local MCP setup](MCP.md) for independent authorization, keystore setup and
+the complete tool map.
+
 ## Links
 
 - npm: https://www.npmjs.com/package/@webcull/cli

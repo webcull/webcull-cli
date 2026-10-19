@@ -1,7 +1,7 @@
 {
   "name": "@webcull/cli",
-  "version": "0.1.2",
-  "description": "Official WebCull CLI for secure bookmark access and agent workflows.",
+  "version": "0.1.3",
+  "description": "Official WebCull CLI and local MCP server for secure bookmark access and agent workflows.",
   "type": "module",
   "license": "SEE LICENSE IN LICENSE.md",
   "homepage": "https://webcull.com",
@@ -18,6 +18,7 @@
   "files": [
     "src/",
     "README.md",
+    "MCP.md",
     "LICENSE.md",
     "SECURITY.md",
     "CHANGELOG.md"

@@ -12,7 +12,8 @@ report.
 
 ## CLI Token Safety
 
-The CLI stores tokens in OS credential storage when available. Token values must
+The CLI and local MCP store tokens in OS credential storage with no plaintext
+fallback. Their authorizations are independent. Token values must
 not be printed, logged, committed, included in screenshots, or copied into bug
 reports.
 
@@ -21,12 +22,16 @@ account display data, and scopes.
 
 ## E2EE Safety
 
-The CLI must never accept E2EE passphrases through command line flags,
-environment variables, config files, stdin piping, logs, or API payloads.
+The CLI accepts one E2EE passphrase piped directly from a user-managed keystore
+with explicit `--e2ee-passphrase-stdin` and account selection. Local MCP reads
+the selected account's OS keystore entry directly. Neither interface accepts
+E2EE secrets through command arguments, environment variables, configuration,
+logs, or AI tool arguments. See [MCP setup](MCP.md) for platform instructions.
 
-Encrypted bookmark content is decrypted locally only after an interactive hidden
-prompt. The server must not receive passphrases, passphrase hashes, derived
-keys, decrypted check values, or decrypted bookmark fields.
+The WebCull API must not receive passphrases, passphrase hashes, derived keys,
+decrypted check values, or decrypted bookmark fields. Decrypted results requested
+through MCP are shared with the connected AI application. Local decryption does
+not imply the AI application or its provider runs locally.
 
 ## WebCull Account Access
 
