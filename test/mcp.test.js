@@ -32,6 +32,7 @@ test('MCP exposes every registered CLI operation and requires explicit accounts'
   for (const tool of runtime.catalog.tools) {
     if (['accounts', 'login', 'setup'].includes(tool.command)) continue;
     assert.ok(tool.inputSchema.required.includes('account'));
+    assert.throws(() => runtime.catalog.validate(tool.name, {}), /Missing required argument: account/);
   }
   assert.throws(() => runtime.catalog.validate('webcull_setup', { passphrase: 'not-a-secret' }), /Secrets belong/);
   assert.throws(() => runtime.catalog.validate('webcull_bookmarks_get', { account: 'userhash123', ids: '1', maxChars: -1 }), /range/);
@@ -39,6 +40,16 @@ test('MCP exposes every registered CLI operation and requires explicit accounts'
   for (const account of ['', ' ', 'bad/hash']) {
     assert.throws(() => runtime.catalog.validate('webcull_whoami', { account }), /format/);
   }
+});
+
+test('MCP account omission fails before credential or API access', async () => {
+  const runtime = new McpRuntime();
+  for (const tool of runtime.catalog.tools) {
+    if (['accounts', 'login', 'setup'].includes(tool.command)) continue;
+    await assert.rejects(() => runtime.call(tool.name, {}), /Missing required argument: account/);
+  }
+  await assert.rejects(() => runtime.call('webcull_setup', { checkE2ee: true }), /explicit account/);
+  await assert.rejects(() => runtime.context().tokenStore.requireToken(), error => error.cliResponse?.code === 'account_selection_required');
 });
 
 test('CLI consumes global account and encryption flags before write validation', async () => {

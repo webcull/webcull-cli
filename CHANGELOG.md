@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Remove MCP default-account state and require an explicit account for every
+  account-scoped operation, including credential access and local logout.
 - Add local MCP tools for all CLI operations, independent authorization and
   keystore-only E2EE access, with setup guidance for desktop AI applications.
 - Fix write commands rejecting the global account and encryption input flags.

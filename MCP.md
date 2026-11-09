@@ -99,8 +99,13 @@ All 20 CLI commands have MCP tools; setup adds one extra tool. The name is
 | Relationships | `webcull_graph_around`, `webcull_graph_backlinks`, `webcull_graph_path`, `webcull_graph_validate`, `webcull_graph_schema` |
 | Reminders | `webcull_reminders_create`, `webcull_reminders_list`, `webcull_reminders_cancel` |
 
-Tool discovery describes the accepted arguments. Supply `account` explicitly
-for account operations. CLI options become camelCase arguments, such as
+Tool discovery describes the accepted arguments. MCP has no default or active
+account. Supply the intended `account` hash explicitly on every account-scoped
+tool call, even when only one account is authorized. Authorizing or using another
+account never selects it for another call. Account listing, login and general
+setup do not select an account; checking E2EE during setup requires one.
+Terminal commands with the `mcp` prefix likewise require `--account <hash>`.
+CLI options become camelCase arguments, such as
 `maxChars`, `parentId`, and `dryRun`. Update, proxy and reminder cancellation
 use an `id` argument. Get uses comma-separated `ids`. Responses are structured
 JSON objects with a matching text representation; terminal JSONL formatting

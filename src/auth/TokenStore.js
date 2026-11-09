@@ -85,7 +85,7 @@ export class TokenStore {
       const previousAccounts = config.accounts;
       config.accounts = previousAccounts.filter(item => item !== existing);
       config.accounts.push(account);
-      config.active_account = user.hash;
+      if (this.client !== 'mcp') config.active_account = user.hash;
       try {
         await this.writeUnlocked(config);
       } catch (error) {
@@ -101,6 +101,7 @@ export class TokenStore {
   }
 
   async requireToken() {
+    this.requireExplicitMcpAccount();
     const config = await this.registry({ verifyCredentials: false });
     const account = this.resolveAccount(config.accounts, config.active_account, this.requestedAccount);
     if (!account) {
@@ -130,15 +131,16 @@ export class TokenStore {
 
   async listAccounts() {
     const config = await this.registry({ verifyCredentials: true });
-    const active = this.resolveAccount(config.accounts, config.active_account, null);
+    const active = this.client === 'mcp' ? null : this.resolveAccount(config.accounts, config.active_account, null);
     const sorted = [...config.accounts].sort((left, right) => {
+      if (this.client === 'mcp') return this.accountSelector(left).localeCompare(this.accountSelector(right));
       if (left === active) return -1;
       if (right === active) return 1;
       return Number(right.last_accessed || 0) - Number(left.last_accessed || 0);
     });
     return sorted.map((account, index) => ({
       number: index + 1,
-      active: account === active,
+      ...(this.client !== 'mcp' ? { active: account === active } : {}),
       user: account.user,
       scopes: account.scopes,
       expires: Number(account.expires),
@@ -147,6 +149,7 @@ export class TokenStore {
   }
 
   async accountSelection() {
+    this.requireExplicitMcpAccount();
     const accounts = await this.listAccounts();
     if (accounts.length === 0) {
       throw new Error('Run webcull login first.');
@@ -174,6 +177,7 @@ export class TokenStore {
     if (!response?.user) {
       return;
     }
+    this.requireExplicitMcpAccount();
     await this.withConfigLock(async () => {
       const config = await this.registryUnlocked();
       const account = this.selectedCredentialAccount
@@ -190,13 +194,14 @@ export class TokenStore {
       if (this.hasFutureExpiry(response.expires)) {
         account.expires = Number(response.expires);
       }
-      config.active_account = this.accountSelector(account);
+      if (this.client !== 'mcp') config.active_account = this.accountSelector(account);
       await this.writeUnlocked(config);
       this.requestedAccount = this.accountSelector(account);
     });
   }
 
   async purgeToken() {
+    this.requireExplicitMcpAccount();
     const config = await this.registry({ verifyCredentials: false });
     const account = this.selectedCredentialAccount
       ? config.accounts.find(item => item.credential_account === this.selectedCredentialAccount)
@@ -219,7 +224,7 @@ export class TokenStore {
       }
       await this.credentialStoreFor(account.credential_account).delete();
       config.accounts = config.accounts.filter(item => item !== account);
-      const nextActive = this.mostRecentAccount(config.accounts);
+      const nextActive = this.client === 'mcp' ? null : this.mostRecentAccount(config.accounts);
       if (nextActive) {
         config.active_account = this.accountSelector(nextActive);
       } else {
@@ -239,7 +244,7 @@ export class TokenStore {
         return;
       }
       account.last_accessed = Date.now();
-      config.active_account = this.accountSelector(account);
+      if (this.client !== 'mcp') config.active_account = this.accountSelector(account);
       await this.writeUnlocked(config);
     });
   }
@@ -264,7 +269,7 @@ export class TokenStore {
         config.accounts = valid;
       }
       const active = this.findAccount(config.accounts, config.active_account);
-      if (!active) {
+      if (this.client !== 'mcp' && !active) {
         const nextActive = this.mostRecentAccount(config.accounts);
         if (nextActive) {
           config.active_account = this.accountSelector(nextActive);
@@ -303,7 +308,7 @@ export class TokenStore {
           last_accessed: Date.now(),
           credential_account: legacyCredentialAccount
         });
-        config.active_account = this.accountSelector(config.accounts[config.accounts.length - 1]);
+        if (this.client !== 'mcp') config.active_account = this.accountSelector(config.accounts[config.accounts.length - 1]);
       }
       delete config.token;
       delete config.expires;
@@ -311,10 +316,24 @@ export class TokenStore {
       delete config.user;
       await this.writeUnlocked(config);
     }
+    if (this.client === 'mcp' && Object.hasOwn(config, 'active_account')) {
+      delete config.active_account;
+      await this.writeUnlocked(config);
+    }
     return config;
   }
 
+  requireExplicitMcpAccount(selector = this.requestedAccount) {
+    if (this.client === 'mcp' && !selector) {
+      const failure = 'MCP requires an explicit account for every account operation. Run webcull mcp accounts and supply --account <hash>.';
+      const error = new Error(failure);
+      error.cliResponse = { success: 'false', code: 'account_selection_required', failure };
+      throw error;
+    }
+  }
+
   resolveAccount(accounts, activeSelector, requestedSelector) {
+    this.requireExplicitMcpAccount(requestedSelector);
     if (requestedSelector) {
       return this.findAccount(accounts, requestedSelector);
     }
@@ -368,6 +387,7 @@ export class TokenStore {
   }
 
   async writeUnlocked(config) {
+    if (this.client === 'mcp') delete config.active_account;
     this.validateConfig(config);
     await this.ensureSafeConfigDir();
     await this.ensureSafeConfigTarget();
