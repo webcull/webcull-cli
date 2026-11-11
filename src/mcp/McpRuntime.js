@@ -43,7 +43,6 @@ export class McpRuntime {
       const cli = new WebCullCli({ ...context, output, logger });
       cli.rejectForbiddenE2eeInputs([]);
       const options = { ...args };
-      delete options.account;
       const positionals = [];
       if (['bookmarks update', 'bookmarks proxy', 'reminders cancel'].includes(tool.command)) {
         positionals.push(String(options.id));

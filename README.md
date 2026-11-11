@@ -37,25 +37,28 @@ List locally authorized accounts without exposing their tokens:
 webcull accounts
 ```
 
-Use an account hash or user ID on any account command:
+Supply an account hash or user ID on every account command:
 
 ```bash
 webcull whoami --account abc123
 webcull bookmarks count --account abc123 --path /
 ```
 
-Without `--account`, ordinary commands use the last successfully accessed
-account. Agents should always provide the intended account hash.
+CLI and MCP have no default or active account. Every account command requires
+`--account <hash|id>`, even with one authorized account. Agents should use the
+account hash. Login, account listing and help do not require one. Account lists
+omit active-account markers, and signing in to or using another account never
+selects it for a later command.
 
 To revoke one CLI authorization on the server and remove it from this device:
 
 ```bash
-webcull logout
+webcull logout --account abc123
 ```
 
-When multiple accounts are authorized, an interactive terminal shows a
-numbered account picker. A non-interactive command must provide
-`--account <hash|id>` and receives a structured account list if it does not.
+A missing account returns `account_selection_required` before credential or
+network access. Run `webcull accounts` to find the intended account hash.
+Logout uses the same explicit selection in interactive terminals and scripts.
 
 Logout must confirm server revocation before it removes the token from local OS
 credential storage and clears local authorization metadata. If WebCull cannot
@@ -65,7 +68,7 @@ server logout that did not happen.
 For an offline or lost-server recovery where local removal is still required:
 
 ```bash
-webcull logout --local-only
+webcull logout --account abc123 --local-only
 ```
 
 Local-only logout clearly warns that the selected server token may remain
@@ -80,17 +83,17 @@ only.
 ## Common Commands
 
 ```bash
-webcull whoami
+webcull whoami --account abc123
 webcull accounts
-webcull limits
-webcull bookmarks count
-webcull bookmarks tree --depth 2 --limit 50
-webcull bookmarks search "design systems" --limit 20
-webcull bookmarks get 123 --fields id,title,value,tags
-webcull bookmarks proxy 123 --fields title,icon,description
-webcull reminders list --limit 20
-webcull graph around --stack-id 123
-webcull graph schema
+webcull limits --account abc123
+webcull bookmarks count --account abc123
+webcull bookmarks tree --max-depth 2 --limit 50 --account abc123
+webcull bookmarks search "design systems" --limit 20 --account abc123
+webcull bookmarks get 123 --fields id,title,value,tags --account abc123
+webcull bookmarks proxy 123 --fields title,icon,description --account abc123
+webcull reminders list --limit 20 --account abc123
+webcull graph around --stack-id 123 --account abc123
+webcull graph schema --account abc123
 ```
 
 Run commands with `--format json` when the output is being consumed by a script

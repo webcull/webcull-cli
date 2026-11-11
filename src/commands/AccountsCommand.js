@@ -11,9 +11,6 @@ export class AccountsCommand {
     const accounts = await this.tokenStore.listAccounts();
     this.output.print({
       success: 'true',
-      ...(this.tokenStore.client !== 'mcp' ? {
-        active_account: accounts.find(account => account.active)?.user?.hash || null
-      } : {}),
       accounts,
       ...(accounts.length === 0 ? {
         login_required: true,

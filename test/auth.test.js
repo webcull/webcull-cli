@@ -3,16 +3,15 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { PassThrough } from 'node:stream';
 import { TokenStore } from '../src/auth/TokenStore.js';
 import { CredentialStore } from '../src/auth/CredentialStore.js';
 import { ApiClient } from '../src/http/ApiClient.js';
 import { LogoutCommand } from '../src/commands/LogoutCommand.js';
 import { LoginCommand } from '../src/commands/LoginCommand.js';
 import { AccountsCommand } from '../src/commands/AccountsCommand.js';
-import { AccountPicker } from '../src/auth/AccountPicker.js';
 import { CliAuthFlow } from '../src/auth/CliAuthFlow.js';
 import { WebCullCli } from '../src/WebCullCli.js';
+import { McpRuntime } from '../src/mcp/McpRuntime.js';
 
 class MemoryCredentialStore {
   constructor() {
@@ -62,6 +61,7 @@ test('TokenStore writes restrictive permissions and purges expired tokens', asyn
   const configPath = path.join(dir, 'config.json');
   const credentials = new MemoryCredentialStore();
   const store = new TokenStore(configPath, credentials);
+  store.useAccount(user().hash);
   await store.saveToken({
     token: validToken(),
     expires: Math.floor(Date.now() / 1000) + 60,
@@ -92,6 +92,7 @@ test('TokenStore requires token expiry metadata', async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'webcull-cli-auth-'));
   const configPath = path.join(dir, 'config.json');
   const store = new TokenStore(configPath, new MemoryCredentialStore());
+  store.useAccount(user().hash);
   await assert.rejects(() => store.saveToken({
     token: validToken(),
     scopes: ['bookmarks:read'],
@@ -117,6 +118,7 @@ test('TokenStore rejects secret-like E2EE config keys and unsupported scopes', a
     e2eePassphrase: 'do-not-store'
   }));
   const store = new TokenStore(configPath, new MemoryCredentialStore());
+  store.useAccount(user().hash);
   await assert.rejects(() => store.read(), /must not store E2EE/);
   await fs.writeFile(configPath, JSON.stringify({
     token: validToken(),
@@ -132,6 +134,7 @@ test('TokenStore refuses symbolic link config paths', async () => {
   await fs.writeFile(targetPath, JSON.stringify({ token: validToken(), scopes: ['bookmarks:read'] }));
   await fs.symlink(targetPath, linkPath);
   const store = new TokenStore(linkPath, new MemoryCredentialStore());
+  store.useAccount(user().hash);
   await assert.rejects(() => store.read(), /symbolic link/);
   await assert.rejects(() => store.saveToken({
     token: validToken(),
@@ -152,6 +155,7 @@ test('TokenStore migrates legacy config tokens into OS credentials', async () =>
     user: user()
   }));
   const store = new TokenStore(configPath, credentials);
+  store.useAccount(user().hash);
   assert.equal(await store.requireToken(), validToken());
   const config = JSON.parse(await fs.readFile(configPath, 'utf8'));
   assert.equal(config.token, undefined);
@@ -164,6 +168,7 @@ test('TokenStore migrates an existing legacy OS credential locator', async () =>
   const configPath = path.join(dir, 'config.json');
   const credentials = new MemoryCredentialRegistry();
   const store = new TokenStore(configPath, account => credentials.store(account));
+  store.useAccount(user().hash);
   await credentials.store(store.credentialAccount()).save(validToken());
   await fs.writeFile(configPath, JSON.stringify({
     expires: Math.floor(Date.now() / 1000) + 60,
@@ -374,6 +379,7 @@ test('TokenStore logout purge preserves unrelated non-secret config', async () =
   const configPath = path.join(dir, 'config.json');
   const credentials = new MemoryCredentialStore();
   const store = new TokenStore(configPath, credentials);
+  store.useAccount(user().hash);
   await store.saveToken({
     token: validToken(),
     expires: Math.floor(Date.now() / 1000) + 60,
@@ -389,7 +395,8 @@ test('TokenStore logout purge preserves unrelated non-secret config', async () =
   const loggedOutConfig = JSON.parse(await fs.readFile(configPath, 'utf8'));
   assert.deepEqual(loggedOutConfig, { accounts: [], output: 'json' });
   assert.equal(credentials.token, null);
-  await assert.rejects(() => store.requireToken(), /Run webcull login first/);
+  store.useAccount(user().hash);
+  await assert.rejects(() => store.requireToken(), /No logged-in WebCull account matches/);
 });
 
 test('TokenStore detects a valid stored authorization and clears stale metadata', async () => {
@@ -397,6 +404,7 @@ test('TokenStore detects a valid stored authorization and clears stale metadata'
   const configPath = path.join(dir, 'config.json');
   const credentials = new MemoryCredentialStore();
   const store = new TokenStore(configPath, credentials);
+  store.useAccount(user().hash);
   await store.saveToken({
     token: validToken(),
     expires: Math.floor(Date.now() / 1000) + 60,
@@ -415,6 +423,7 @@ test('TokenStore keeps separate credentials and selects accounts by hash or user
   const configPath = path.join(dir, 'config.json');
   const credentials = new MemoryCredentialRegistry();
   const store = new TokenStore(configPath, account => credentials.store(account));
+  store.useAccount(user().hash);
   await store.saveToken({
     token: validTokenFor('a'),
     expires: Math.floor(Date.now() / 1000) + 60,
@@ -430,8 +439,8 @@ test('TokenStore keeps separate credentials and selects accounts by hash or user
 
   let accounts = await store.listAccounts();
   assert.equal(accounts.length, 2);
-  assert.equal(accounts[0].user.hash, 'account_hash_8');
-  assert.equal(accounts[0].active, true);
+  assert.equal(accounts[0].user.hash, 'account_hash_7');
+  assert.ok(accounts.every(account => !Object.hasOwn(account, 'active')));
 
   store.useAccount('account_hash_7');
   assert.equal(await store.requireToken(), validTokenFor('a'));
@@ -476,6 +485,7 @@ test('TokenStore preserves an existing account when duplicate login is attempted
   const configPath = path.join(dir, 'config.json');
   const credentials = new MemoryCredentialRegistry();
   const store = new TokenStore(configPath, account => credentials.store(account));
+  store.useAccount(user().hash);
   await store.saveToken({
     token: validTokenFor('a'),
     expires: Math.floor(Date.now() / 1000) + 60,
@@ -493,155 +503,122 @@ test('TokenStore preserves an existing account when duplicate login is attempted
   assert.equal(await store.requireToken(), validTokenFor('a'));
 });
 
-test('MCP registry never selects or reports a default, including across concurrent accounts', async t => {
-  // Reuse the isolated credential-registry fixture; no real OS credentials or API calls.
-  await fs.mkdir(new URL('../../tmp/', import.meta.url), { recursive: true });
-  const dir = await fs.mkdtemp(new URL('../../tmp/webcull-mcp-auth-', import.meta.url));
-  t.after(() => fs.rm(dir, { recursive: true, force: true }));
-  const configPath = path.join(dir, 'mcp.json');
-  const credentials = new MemoryCredentialRegistry();
-  const makeStore = () => new TokenStore(configPath, account => credentials.store(account), { client: 'mcp' });
-  const setup = makeStore();
-  const record = (id, letter) => ({ token: validTokenFor(letter), user: user(id, 'account_hash_' + id),
-    expires: Math.floor(Date.now() / 1000) + 600, scopes: ['bookmarks:read', 'bookmarks:write'] });
-  const missingAccount = error => error.cliResponse?.code === 'account_selection_required';
-  await setup.saveToken(record(7, 'a'));
-  const implicit = makeStore();
-  // A single authorized account must not make omission acceptable, even for local logout.
-  await assert.rejects(() => implicit.requireToken(), missingAccount);
-  await assert.rejects(() => implicit.accountSelection(), missingAccount);
-  await assert.rejects(() => implicit.purgeToken(), missingAccount);
-  await assert.rejects(() => new LogoutCommand({}, implicit).run({ options: { localOnly: true } }), missingAccount);
-  assert.throws(() => implicit.resolveAccount([], 'account_hash_7', null), missingAccount);
-  assert.equal(Object.hasOwn(await setup.read(), 'active_account'), false);
-  await setup.saveToken(record(8, 'b'));
+for (const client of ['cli', 'mcp']) {
+  test(client + ' registry never selects or reports a default, including across concurrent accounts', async t => {
+    // Reuse the isolated credential-registry fixture; no real OS credentials or API calls.
+    await fs.mkdir(new URL('../../tmp/', import.meta.url), { recursive: true });
+    const dir = await fs.mkdtemp(new URL('../../tmp/webcull-mcp-auth-', import.meta.url));
+    t.after(() => fs.rm(dir, { recursive: true, force: true }));
+    const configPath = path.join(dir, 'mcp.json');
+    const credentials = new MemoryCredentialRegistry();
+    const makeStore = () => new TokenStore(configPath, account => credentials.store(account), { client });
+    const setup = makeStore();
+    const record = (id, letter) => ({ token: validTokenFor(letter), user: user(id, 'account_hash_' + id),
+      expires: Math.floor(Date.now() / 1000) + 600, scopes: ['bookmarks:read', 'bookmarks:write'] });
+    const missingAccount = error => error.cliResponse?.code === 'account_selection_required';
+    await setup.saveToken(record(7, 'a'));
+    await assert.rejects(() => setup.requireToken(), missingAccount);
+    const implicit = makeStore();
+    // A single authorized account must not make omission acceptable, even for local logout.
+    await assert.rejects(() => implicit.requireToken(), missingAccount);
+    await assert.rejects(() => implicit.accountSelection(), missingAccount);
+    await assert.rejects(() => implicit.purgeToken(), missingAccount);
+    await assert.rejects(() => new LogoutCommand({}, implicit).run({ options: { localOnly: true } }), missingAccount);
+    assert.throws(() => implicit.resolveAccount([], null), missingAccount);
+    assert.equal(Object.hasOwn(await setup.read(), 'active_account'), false);
+    await setup.saveToken(record(8, 'b'));
 
-  // Simulate metadata written by the previous MCP version. Only the obsolete selector is removed.
-  const legacy = await setup.read();
-  legacy.active_account = 'account_hash_8';
-  legacy.preference = 'preserve';
-  await fs.writeFile(configPath, JSON.stringify(legacy));
-  const accounts = await implicit.listAccounts();
-  assert.deepEqual(accounts.map(account => account.user.hash), ['account_hash_7', 'account_hash_8']);
-  assert.ok(accounts.every(account => !Object.hasOwn(account, 'active')));
-  const migrated = await setup.read();
-  assert.equal(Object.hasOwn(migrated, 'active_account'), false);
-  assert.deepEqual(migrated.accounts, legacy.accounts);
-  assert.equal(migrated.preference, 'preserve');
+    // Simulate metadata written by the previous version. Only the obsolete selector is removed.
+    const legacy = await setup.read();
+    legacy.active_account = 'account_hash_8';
+    legacy.preference = 'preserve';
+    await fs.writeFile(configPath, JSON.stringify(legacy));
+    const accounts = await implicit.listAccounts();
+    assert.deepEqual(accounts.map(account => account.user.hash), ['account_hash_7', 'account_hash_8']);
+    assert.ok(accounts.every(account => !Object.hasOwn(account, 'active')));
+    const migrated = await setup.read();
+    assert.equal(Object.hasOwn(migrated, 'active_account'), false);
+    assert.deepEqual(migrated.accounts, legacy.accounts);
+    assert.equal(migrated.preference, 'preserve');
 
-  const first = makeStore();
-  const second = makeStore();
-  first.useAccount('account_hash_7');
-  second.useAccount('account_hash_8');
-  assert.deepEqual(await Promise.all([first.requireToken(), second.requireToken()]), [validTokenFor('a'), validTokenFor('b')]);
-  await first.updateSelectedAccount({ user: user(7, 'account_hash_7'), scopes: ['bookmarks:read', 'bookmarks:write'] });
-  assert.equal(Object.hasOwn(await setup.read(), 'active_account'), false);
-  await assert.rejects(() => makeStore().requireToken(), missingAccount);
-  const unknown = makeStore();
-  unknown.useAccount('unknown_account');
-  await assert.rejects(() => unknown.requireToken(), /No logged-in WebCull account matches/);
+    const first = makeStore();
+    const second = makeStore();
+    first.useAccount('account_hash_7');
+    second.useAccount('account_hash_8');
+    assert.deepEqual(await Promise.all([first.requireToken(), second.requireToken()]), [validTokenFor('a'), validTokenFor('b')]);
+    await first.updateSelectedAccount({ user: user(7, 'account_hash_7'), scopes: ['bookmarks:read', 'bookmarks:write'] });
+    assert.equal(Object.hasOwn(await setup.read(), 'active_account'), false);
+    await assert.rejects(() => makeStore().requireToken(), missingAccount);
+    const unknown = makeStore();
+    unknown.useAccount('unknown_account');
+    await assert.rejects(() => unknown.requireToken(), /No logged-in WebCull account matches/);
 
-  let output;
-  const command = new AccountsCommand(implicit);
-  command.output = { print: value => { output = value; } };
-  await command.run({ options: {} });
-  assert.equal(Object.hasOwn(output, 'active_account'), false);
-  assert.ok(output.accounts.every(account => !Object.hasOwn(account, 'active')));
-  await first.purgeToken();
-  assert.equal(await second.requireToken(), validTokenFor('b'));
-  assert.equal(Object.hasOwn(await setup.read(), 'active_account'), false);
-  await assert.rejects(() => makeStore().requireToken(), missingAccount);
-  const expired = await setup.read();
-  expired.accounts[0].expires = Math.floor(Date.now() / 1000) - 1;
-  await setup.write(expired);
-  assert.deepEqual(await implicit.listAccounts(), []);
-  await command.run({ options: {} });
-  assert.equal(output.login_required, true);
-  assert.equal(Object.hasOwn(output, 'active_account'), false);
-  assert.equal(Object.hasOwn(await setup.read(), 'active_account'), false);
-});
+    // Exercise real command and API auth routing, stopping at the transport boundary.
+    // No backend response or network request is needed to verify the selected credential.
+    const requests = [];
+    const stopped = new Error('Transport intentionally stopped');
+    const context = () => {
+      const tokenStore = makeStore();
+      const apiClient = new ApiClient({ apiUrl: 'https://api.webcull.com', tokenStore, client });
+      apiClient.request = async (url, options) => {
+        requests.push([url.pathname, options.headers.Authorization]);
+        throw stopped;
+      };
+      return { tokenStore, apiClient };
+    };
+    const cli = new WebCullCli(context());
+    const runtime = new McpRuntime();
+    runtime.context = context;
+    for (const id of [7, 8]) {
+      const operation = client === 'mcp'
+        ? () => runtime.call('webcull_whoami', { account: 'account_hash_' + id })
+        : () => cli.run(['whoami', '--account', 'account_hash_' + id]);
+      await assert.rejects(operation, error => error === stopped);
+    }
+    assert.deepEqual(requests, [
+      ['/' + client + '/whoami', 'Bearer ' + validTokenFor('a')],
+      ['/' + client + '/whoami', 'Bearer ' + validTokenFor('b')]
+    ]);
+    await assert.rejects(() => cli.run(['whoami']), missingAccount);
+    assert.equal(requests.length, 2);
 
-test('LogoutCommand asks a picker to choose among multiple accounts', async () => {
-  const calls = [];
-  const accounts = [
-    { number: 1, active: true, user: user(7, 'account_hash_7') },
-    { number: 2, active: false, user: user(8, 'account_hash_8') }
-  ];
-  const command = new LogoutCommand({
-    async post(path, data, options) {
-      calls.push(['post', path, data, options]);
-      return { success: 'true' };
-    },
-    structuredError(response, message) {
-      return new Error(response.failure || message);
-    }
-  }, {
-    async accountSelection() {
-      return { selected: null, accounts };
-    },
-    async selectPublicAccount(account) {
-      calls.push(['select', account.user.hash]);
-    },
-    async purgeToken() {
-      calls.push(['purge']);
-    }
-  }, {
-    log(message) {
-      calls.push(['log', message]);
-    }
-  }, {
-    async choose(choices, action) {
-      calls.push(['choose', choices.length, action]);
-      return choices[1];
-    }
+    let output;
+    const command = new AccountsCommand(implicit);
+    command.output = { print: value => { output = value; } };
+    await command.run({ options: {} });
+    assert.equal(Object.hasOwn(output, 'active_account'), false);
+    assert.ok(output.accounts.every(account => !Object.hasOwn(account, 'active')));
+    await first.purgeToken();
+    assert.equal(await second.requireToken(), validTokenFor('b'));
+    assert.equal(Object.hasOwn(await setup.read(), 'active_account'), false);
+    await assert.rejects(() => makeStore().requireToken(), missingAccount);
+    const expired = await setup.read();
+    expired.accounts[0].expires = Math.floor(Date.now() / 1000) - 1;
+    await setup.write(expired);
+    assert.deepEqual(await implicit.listAccounts(), []);
+    await command.run({ options: {} });
+    assert.equal(output.login_required, true);
+    assert.equal(Object.hasOwn(output, 'active_account'), false);
+    assert.equal(Object.hasOwn(await setup.read(), 'active_account'), false);
   });
 
-  await command.run();
+}
 
-  assert.deepEqual(calls.slice(0, 3), [
-    ['choose', 2, 'log out'],
-    ['select', 'account_hash_8'],
-    ['post', '/cli/auth-logout', {}, { auth: true }]
-  ]);
-  assert.deepEqual(calls[3], ['purge']);
-});
-
-test('AccountPicker returns a structured account list when input is non-interactive', async () => {
-  const picker = new AccountPicker({ input: { isTTY: false }, output: { isTTY: false } });
-  const accounts = [{ number: 1, user: user(7, 'account_hash_7') }];
-  await assert.rejects(() => picker.choose(accounts, 'log out'), error => {
-    assert.equal(error.cliResponse.code, 'account_selection_required');
-    assert.deepEqual(error.cliResponse.accounts, accounts);
-    return true;
-  });
-});
-
-test('AccountPicker accepts a numbered terminal selection', async () => {
-  const input = new PassThrough();
-  const output = new PassThrough();
-  input.isTTY = true;
-  output.isTTY = true;
-  let displayed = '';
-  output.on('data', chunk => {
-    displayed += chunk.toString('utf8');
-  });
-  const accounts = [
-    { number: 1, active: true, user: user(7, 'account_hash_7') },
-    { number: 2, active: false, user: user(8, 'account_hash_8') }
-  ];
-  const picker = new AccountPicker({ input, output });
-  input.end('2\n');
-
-  const selected = await picker.choose(accounts, 'log out');
-
-  assert.equal(selected.user.hash, 'account_hash_8');
-  assert.match(displayed, /1\. Account 7/);
-  assert.match(displayed, /2\. Account 8/);
-  assert.match(displayed, /Choose an account to log out \(1-2, or q to cancel\)/);
+test('CLI requires an account before credentials, API calls or command work, without reusing a prior selection', async () => {
+  const store = new TokenStore(undefined, () => assert.fail('Must not access credentials'));
+  store.read = async () => assert.fail('Must not access account metadata');
+  const cli = new WebCullCli({ tokenStore: store });
+  for (const name of cli.commands.keys()) {
+    if (['login', 'accounts'].includes(name)) continue;
+    store.useAccount('account_hash_7');
+    await assert.rejects(() => cli.run(name.split(' ')), error => error.cliResponse?.code === 'account_selection_required');
+    assert.equal(store.requestedAccount, null);
+  }
+  await assert.rejects(() => cli.run(['logout', '--local-only']), error => error.cliResponse?.code === 'account_selection_required');
 });
 
 test('AccountsCommand prints the local account registry', async () => {
-  const accounts = [{ number: 1, active: true, user: user(7, 'account_hash_7') }];
+  const accounts = [{ number: 1, user: user(7, 'account_hash_7') }];
   const printed = [];
   const command = new AccountsCommand({
     async listAccounts() {
@@ -658,7 +635,6 @@ test('AccountsCommand prints the local account registry', async () => {
 
   assert.deepEqual(printed, [[{
     success: 'true',
-    active_account: 'account_hash_7',
     accounts
   }, { format: 'json' }]]);
 });
@@ -680,7 +656,6 @@ test('AccountsCommand guides login when no local account is authorized', async (
 
   assert.deepEqual(printed, [{
     success: 'true',
-    active_account: null,
     accounts: [],
     login_required: true,
     next_command: 'webcull login'

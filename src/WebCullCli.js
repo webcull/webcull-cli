@@ -24,7 +24,7 @@ import { RemindersCancelCommand } from './commands/RemindersCancelCommand.js';
 import { E2eeSession } from './e2ee/E2eeSession.js';
 
 export class WebCullCli {
-  constructor({ tokenStore, apiClient, e2eeSession, output, logger = console, loginFlow, accountPicker } = {}) {
+  constructor({ tokenStore, apiClient, e2eeSession, output, logger = console, loginFlow } = {}) {
     this.parser = new CommandParser();
     this.tokenStore = tokenStore || new TokenStore();
     this.output = output;
@@ -35,7 +35,7 @@ export class WebCullCli {
     this.e2eeSession = e2eeSession || new E2eeSession(this.apiClient);
     this.commands = new Map();
     this.register(new LoginCommand(this.apiClient, this.tokenStore, loginFlow));
-    this.register(new LogoutCommand(this.apiClient, this.tokenStore, logger, accountPicker));
+    this.register(new LogoutCommand(this.apiClient, this.tokenStore, logger));
     this.register(new AccountsCommand(this.tokenStore));
     this.register(new WhoamiCommand(this.apiClient, this.tokenStore));
     this.register(new LimitsCommand(this.apiClient));
@@ -69,9 +69,7 @@ export class WebCullCli {
 
   async execute(parsed) {
     this.configureE2eePassphraseInput(parsed);
-    if (parsed.options.account !== undefined) {
-      this.tokenStore.useAccount(parsed.options.account);
-    }
+    this.tokenStore.useAccount(parsed.options.account);
     if (parsed.options.help || parsed.command === 'help' || !parsed.command) {
       this.printHelp();
       return;
@@ -79,6 +77,9 @@ export class WebCullCli {
     const command = this.commands.get(parsed.commandPath);
     if (!command) {
       throw new Error('Unknown command: ' + parsed.commandPath);
+    }
+    if (!['login', 'accounts'].includes(parsed.commandPath)) {
+      this.tokenStore.requireExplicitAccount();
     }
     const options = { ...parsed.options };
     delete options.account;
@@ -155,7 +156,7 @@ export class WebCullCli {
       '  --max-chars <n>           Maximum response characters',
       '  --fields <list>           Comma separated output fields',
       '  --format json|jsonl       Output format',
-      '  --account <hash|id>       Use a logged-in account',
+      '  --account <hash|id>       Required for every account operation',
       '  --e2ee-passphrase-stdin   Read one passphrase from piped stdin',
       '  --local-only              Logout option: remove only local authorization'
     ].join('\n'));

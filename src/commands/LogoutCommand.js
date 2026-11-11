@@ -1,21 +1,13 @@
-import { AccountPicker } from '../auth/AccountPicker.js';
-
 export class LogoutCommand {
-  constructor(apiClient, tokenStore, logger = console, accountPicker = null) {
+  constructor(apiClient, tokenStore, logger = console) {
     this.name = 'logout';
     this.apiClient = apiClient;
     this.tokenStore = tokenStore;
     this.logger = logger;
-    this.accountPicker = accountPicker || new AccountPicker();
   }
 
   async run(parsed = { options: {} }) {
-    const selection = await this.tokenStore.accountSelection();
-    let selected = selection.selected;
-    if (!selected) {
-      selected = await this.accountPicker.choose(selection.accounts, 'log out');
-      await this.tokenStore.selectPublicAccount(selected);
-    }
+    await this.tokenStore.accountSelection();
     const localOnly = parsed.options?.localOnly && parsed.options.localOnly !== 'false';
     if (localOnly) {
       await this.tokenStore.purgeToken();

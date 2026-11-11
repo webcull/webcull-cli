@@ -2,8 +2,9 @@
 
 ## Unreleased
 
-- Remove MCP default-account state and require an explicit account for every
-  account-scoped operation, including credential access and local logout.
+- Remove default-account state from both CLI and MCP. Every account operation
+  now requires an explicit account, including credential access and local logout.
+  Update scripts to pass `--account <hash|id>`; the logout picker is removed.
 - Add local MCP tools for all CLI operations, independent authorization and
   keystore-only E2EE access, with setup guidance for desktop AI applications.
 - Fix write commands rejecting the global account and encryption input flags.
