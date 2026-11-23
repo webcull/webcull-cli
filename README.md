@@ -107,6 +107,42 @@ Retryable failures preserve structured `request_busy`,
 `request_lock_unavailable`, or `throttled` codes and their retry timing. Respect
 that timing and narrow the next request after throttling.
 
+## Saved Display Order
+
+Use `bookmarks order` to place a bookmark or subfolder among its current siblings:
+
+```bash
+webcull bookmarks order --account abc123 --id 456 --position first
+webcull bookmarks order --account abc123 --id 456 --position last
+webcull bookmarks order --account abc123 --id 456 --before-id 789
+webcull bookmarks order --account abc123 --id 456 --after-id 789
+webcull bookmarks order --account abc123 --id 456 --order-id 2
+```
+
+Choose exactly one placement. `--order-id` is the final one-based position.
+To apply a complete folder order, list every direct child exactly once, including
+subfolders. Parent `0` means the account root:
+
+```bash
+webcull bookmarks order --account abc123 --parent-id 123 --ids 789,456,321 --expected-order 456,321,789 --dry-run
+```
+
+Remove `--dry-run` to save. `--expected-order` is optional in either mode and
+rejects a write if the complete current sequence changed since your read. Read
+all pages before constructing either list. Both modes support at most 500 direct
+children per folder; missing, duplicate or foreign children are rejected.
+
+The operation saves the complete requested order together and returns
+`before_ids`, `ordered_ids` and `changed`. It changes no content and moves no
+items between folders. Use `bookmarks update --parent-id` for a folder move,
+then order the item in its destination. Ordering needs no E2EE passphrase;
+encryption conversion must be finished first.
+
+Read back the folder's saved `order_id` values after writing. Do not automatically
+retry a write that timed out or returned an uncertain outcome. MCP exposes the
+same modes through `webcull_bookmarks_order`; see the [parity map and documented
+exceptions](MCP.md#tools-and-cli-parity).
+
 ## E2EE Safety
 
 The CLI performs end-to-end encryption work locally. It must never send an E2EE

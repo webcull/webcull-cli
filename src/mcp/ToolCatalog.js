@@ -36,6 +36,15 @@ const definitions = [
   ['bookmarks get', 'Retrieve selected bookmarks. Encrypted fields require the account’s local E2EE keystore entry.', { ...budget, ids: text('Comma-separated bookmark IDs.', 4000), decrypt: flag('Decrypt encrypted fields locally; defaults to true.') }, ['ids'], true],
   ['bookmarks create', 'Create one bookmark or folder. Perform writes only when the user requests them.', { ...edits, proxy: flag('Refresh metadata after creating an unencrypted bookmark.'), proxyFields: fields, proxyExclude: fields }, [], false],
   ['bookmarks update', 'Update one bookmark or folder, preserving omitted fields.', { ...edits, id: stackId }, ['id'], false],
+  ['bookmarks order', 'Set saved display order within one folder, including subfolders. Use id with exactly one of position, orderId, beforeId or afterId; or parentId with ids listing every direct child in the desired order. Does not move items between folders. At most 500 children. Read back order_id after saving. Never retry an uncertain write automatically.', {
+    id: stackId, parentId: integer('Folder ID for complete-list mode; 0 is the account root.', 0),
+    ids: text('Complete comma-separated direct-child IDs, in desired order. Include folders; no duplicates or omissions.', 8500),
+    position: { type: 'string', enum: ['first', 'last'], description: 'Place id first or last among all its siblings.' },
+    orderId: integer('Final one-based position among all siblings.', 1, 500),
+    beforeId: integer('Place id immediately before this sibling.'),
+    afterId: integer('Place id immediately after this sibling.'),
+    expectedOrder: text('Optional complete current ID sequence. Reject if it changed since your read.', 8500), dryRun
+  }, [], false],
   ['bookmarks proxy', 'Refresh selected metadata for an unencrypted bookmark. This can replace existing values.', { id: stackId, fields, exclude: fields, dryRun }, ['id'], false],
   ['graph around', 'Inspect nearby relationships around an item.', { ...budget, stackId, depth: integer('Relationship depth.', 1, 20), direction: { type: 'string', enum: ['both', 'inbound', 'outbound'] }, expandLinkedStacks: flag('Expand linked stacks.'), linkedDepth: integer('Linked stack depth.', 0, 20) }, ['stackId'], true],
   ['graph backlinks', 'Find relationships pointing to an item.', { ...budget, stackId }, ['stackId'], true],

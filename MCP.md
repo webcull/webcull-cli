@@ -89,15 +89,19 @@ not the E2EE entry you manage.
 
 ## Tools and CLI parity
 
-All 20 CLI commands have MCP tools; setup adds one extra tool. The name is
+Every MCP feature is also available through the CLI, and every registered CLI
+operation has an MCP tool. Both use the same command implementation. Intentional
+transport differences are listed under [Parity exceptions](#parity-exceptions).
+The tool name is
 `webcull_` followed by the command words separated by underscores:
 
 | CLI command group | MCP tool names |
 | --- | --- |
 | Account and usage | `webcull_login`, `webcull_logout`, `webcull_accounts`, `webcull_whoami`, `webcull_limits` |
-| Bookmarks and folders | `webcull_bookmarks_count`, `webcull_bookmarks_tree`, `webcull_bookmarks_search`, `webcull_bookmarks_get`, `webcull_bookmarks_create`, `webcull_bookmarks_update`, `webcull_bookmarks_proxy` |
+| Bookmarks and folders | `webcull_bookmarks_count`, `webcull_bookmarks_tree`, `webcull_bookmarks_search`, `webcull_bookmarks_get`, `webcull_bookmarks_create`, `webcull_bookmarks_update`, `webcull_bookmarks_order`, `webcull_bookmarks_proxy` |
 | Relationships | `webcull_graph_around`, `webcull_graph_backlinks`, `webcull_graph_path`, `webcull_graph_validate`, `webcull_graph_schema` |
 | Reminders | `webcull_reminders_create`, `webcull_reminders_list`, `webcull_reminders_cancel` |
+| Local setup (`webcull mcp setup`) | `webcull_setup` |
 
 Tool discovery describes the accepted arguments. MCP has no default or active
 account. Supply the intended `account` hash explicitly on every account-scoped
@@ -111,10 +115,36 @@ use an `id` argument. Get uses comma-separated `ids`. Responses are structured
 JSON objects with a matching text representation; terminal JSONL formatting
 is unnecessary. E2EE keystore lookup replaces the CLI's explicit stdin flag.
 
-All existing operation restrictions still apply: one-item writes, ownership,
+Use `webcull_bookmarks_order` to maintain saved display order. Supply `id` with
+exactly one of `position: "first"`, `position: "last"`, `beforeId`, `afterId`, or
+`orderId` (final one-based position). Alternatively, supply `parentId` and `ids`
+containing all direct children in the desired order. Both modes are limited to
+folders with at most 500 children. Include subfolders in the sequence.
+`expectedOrder` checks the complete current sequence before saving; `dryRun`
+previews without writes. Read back `order_id` after saving. See the equivalent
+[CLI examples](README.md#saved-display-order).
+
+All existing operation restrictions still apply: one-item content writes, ownership,
 subscription checks, E2EE conversion restrictions, metadata refresh only for
 unencrypted accounts, and bounded encrypted search. No bulk deletion or new
 graph-write capability is added. CLI and MCP share the account's usage quotas.
+Complete-folder ordering is the explicit bounded exception to one-item writes.
+
+### Parity exceptions
+
+These differences preserve the same operation through each interface:
+
+| Area | Difference and equivalent workflow | Reason |
+| --- | --- | --- |
+| Authorization | CLI uses `webcull login`; MCP uses `webcull_login` start/complete or terminal `webcull mcp login`. Credentials and logout are independent. | Interactive terminal login and tool calls have different lifetimes; authorizations stay isolated. |
+| E2EE secret input | CLI accepts `--e2ee-passphrase-stdin` piped from the user's keystore. MCP reads its configured OS keystore directly. | Secrets must not enter tool arguments or chat. |
+| Account selector | CLI accepts account hash or numeric user ID. MCP tool calls require the account hash returned by `webcull_accounts`. | A stable explicit selector avoids ambiguous tool calls. |
+| Input and output | CLI has positional arguments, kebab-case flags and JSON/JSONL output where supported. MCP uses named camelCase arguments, typed and bounded schemas, and structured JSON with matching text. | Each transport has its own argument and response format; domain limits still apply in both. |
+| Setup entry point | `webcull_setup` maps to terminal `webcull mcp setup`, outside the ordinary CLI command registry. | Setup configures the local MCP connection. |
+
+There are no intended MCP-only bookmark, folder, graph or reminder features.
+New differences must be documented explicitly with their reason and equivalent
+workflow; an undocumented missing feature is a parity defect.
 
 ## Troubleshooting
 

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Add `bookmarks order` and `webcull_bookmarks_order` for first/last, relative,
+  numbered and complete-folder display order, with dry runs and optional
+  current-order checks. Document CLI/MCP feature parity and transport exceptions.
 - Remove default-account state from both CLI and MCP. Every account operation
   now requires an explicit account, including credential access and local logout.
   Update scripts to pass `--account <hash|id>`; the logout picker is removed.

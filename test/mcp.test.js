@@ -88,7 +88,7 @@ test('MCP negotiates, lists tools, invokes real setup and rejects secret argumen
     assert.equal(h.messages[0].error.code, -32600);
     h.initialize();
     h.send(2, 'tools/list');
-    assert.equal(h.messages.find(m => m.id === 2).result.tools.length, 21);
+    assert.equal(h.messages.find(m => m.id === 2).result.tools.length, h.runtime.catalog.list().length);
     h.send(3, 'tools/call', { name: 'webcull_setup', arguments: {} });
     await h.server.queue;
     const result = h.messages.find(m => m.id === 3).result;

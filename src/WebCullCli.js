@@ -12,6 +12,7 @@ import { BookmarksSearchCommand } from './commands/BookmarksSearchCommand.js';
 import { BookmarksGetCommand } from './commands/BookmarksGetCommand.js';
 import { BookmarksCreateCommand } from './commands/BookmarksCreateCommand.js';
 import { BookmarksUpdateCommand } from './commands/BookmarksUpdateCommand.js';
+import { BookmarksOrderCommand } from './commands/BookmarksOrderCommand.js';
 import { BookmarksProxyCommand } from './commands/BookmarksProxyCommand.js';
 import { GraphAroundCommand } from './commands/GraphAroundCommand.js';
 import { GraphBacklinksCommand } from './commands/GraphBacklinksCommand.js';
@@ -45,6 +46,7 @@ export class WebCullCli {
     this.register(new BookmarksGetCommand(this.apiClient, this.e2eeSession));
     this.register(new BookmarksCreateCommand(this.apiClient, this.e2eeSession));
     this.register(new BookmarksUpdateCommand(this.apiClient, this.e2eeSession));
+    this.register(new BookmarksOrderCommand(this.apiClient));
     this.register(new BookmarksProxyCommand(this.apiClient, this.e2eeSession));
     this.register(new GraphAroundCommand(this.apiClient));
     this.register(new GraphBacklinksCommand(this.apiClient));
@@ -140,6 +142,7 @@ export class WebCullCli {
       '  bookmarks get             Fetch bookmarks by id',
       '  bookmarks create          Create one bookmark or folder',
       '  bookmarks update <id>     Update one bookmark or folder',
+      '  bookmarks order           Place one item or order a complete folder',
       '  bookmarks proxy <id>      Refresh bookmark metadata through the proxy',
       '  graph around              Show relationships around a stack item',
       '  graph backlinks           Show items that point at a stack item',
